@@ -1,12 +1,14 @@
 #!/usr/bin/python3
 import sys,os,datetime,dataclasses,concurrent.futures,multiprocessing
 
-DEBUG=False
-
 @dataclasses.dataclass
 class Result:
   name:str
   access:object
+
+SKIPLINKS=False
+if SKIPLINKS:
+  print('Ignoring symbolic links...')
 
 targets=sys.argv[1:]
 results=[]
@@ -16,19 +18,24 @@ if len(targets)==0:
   print('Usage: acleanhome.py [folder1] [folder2] [folder3] [...]')
   sys.exit(0)
 
-def crawl(folder,latest=0):
-  if DEBUG:
-    print(folder)
+def crawl(folder,latest=0,top=False):
   for root,dirs,files in os.walk(folder):
     for d in dirs:
+      if top:
+        print(f'Crawling {d}...')
       access=crawl(os.path.join(root,d),latest)
       if access>latest:
         latest=access
     for f in files:
       f=os.path.join(root,f)
-      access=os.stat(f,follow_symlinks=False).st_atime
-      if access>latest:
-        latest=access
+      if SKIPLINKS and os.path.islink(f):
+        continue
+      try:
+        access=os.stat(f,follow_symlinks=False).st_atime
+        if access>latest:
+          latest=access
+      except Exception as e:
+        print(e)
   return latest
 
 def update():
@@ -40,7 +47,7 @@ def checkaccess(folder):
   processing.append(folder)
   update()
   try:
-    access=crawl(folder)
+    access=crawl(folder,0,True)
     results.append(Result(folder,access))
   except Exception as e:
     print(e)
